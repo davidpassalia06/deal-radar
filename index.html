@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deal Radar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="stylesheet" href="css/master.css">
+</head>
+<body>
+
+<!-- Sidebar backdrop for mobile -->
+<div class="sidebar-backdrop" id="sidebar-backdrop" onclick="toggleSidebar()"></div>
+
+<div class="app">
+  <!-- ════════════════ SIDEBAR ════════════════ -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">
+        <div class="logo-icon">
+          <i class="bi bi-reception-4"></i>
+        </div>
+        <div class="logo-text">Deal<span>Radar</span></div>
+      </div>
+    </div>
+
+    <div class="sidebar-nav">
+      <div class="nav-section-label">Principale</div>
+      <button class="nav-item active" onclick="showPage('dashboard')" id="nav-dashboard">
+        <i class="bi bi-grid-1x2-fill"></i> Dashboard
+      </button>
+      <button class="nav-item" onclick="showPage('catalogo')" id="nav-catalogo">
+        <i class="bi bi-box-seam-fill"></i> Catalogo
+        <span class="badge hidden" id="stale-badge">0</span>
+      </button>
+      <button class="nav-item" onclick="showPage('valuta')" id="nav-valuta">
+        <i class="bi bi-lightning-charge-fill"></i> Valuta affare
+      </button>
+      <div class="nav-section-label" style="margin-top:8px;">Sistema</div>
+      <button class="nav-item" onclick="showPage('impostazioni')" id="nav-impostazioni">
+        <i class="bi bi-gear-fill"></i> Impostazioni
+      </button>
+    </div>
+
+    <div class="sidebar-bottom">
+      <div class="version-label">v1.0 &mdash; dati locali</div>
+    </div>
+  </nav>
+
+  <!-- ════════════════ MAIN ════════════════ -->
+  <main class="main">
+
+    <!-- ── DASHBOARD ── -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Dashboard</div>
+          <div class="page-subtitle" id="dash-date"></div>
+        </div>
+        <button class="btn btn-primary" onclick="openAddModal()">
+          <i class="bi bi-plus-lg"></i> Nuovo prodotto
+        </button>
+      </div>
+
+      <div id="alert-area"></div>
+
+      <div class="grid-4" style="margin-bottom: 28px;" id="stats-grid"></div>
+
+      <div style="margin-bottom: 28px;">
+        <div class="section-label">Da aggiornare</div>
+        <div id="update-list"></div>
+      </div>
+
+      <div>
+        <div class="section-label">Prodotti recenti</div>
+        <div class="grid-2" id="recent-products"></div>
+      </div>
+    </div>
+
+    <!-- ── CATALOGO ── -->
+    <div class="page" id="page-catalogo">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Catalogo</div>
+          <div class="page-subtitle" id="catalog-count"></div>
+        </div>
+        <button class="btn btn-primary" onclick="openAddModal()">
+          <i class="bi bi-plus-lg"></i> Aggiungi
+        </button>
+      </div>
+      <div class="filter-row">
+        <div class="search-bar" style="flex:1; min-width:180px;">
+          <i class="bi bi-search"></i>
+          <input type="text" id="search-input" placeholder="Cerca prodotto..." oninput="renderCatalog()">
+        </div>
+        <button class="btn btn-ghost btn-sm" id="sort-btn" onclick="cycleSort()" style="white-space:nowrap; flex-shrink:0;">
+          <i class="bi bi-arrow-down-up"></i> Ordine
+        </button>
+        <div id="filter-chips"></div>
+      </div>
+      <div class="grid-2" id="catalog-grid"></div>
+    </div>
+
+    <!-- ── VALUTA AFFARE ── -->
+    <div class="page" id="page-valuta">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Valuta un affare</div>
+          <div class="page-subtitle">Inserisci il prezzo che vedi su Vinted</div>
+        </div>
+      </div>
+      <div class="grid-2" style="align-items: flex-start; gap: 20px;">
+        <div class="card">
+          <div class="form-group">
+            <label class="form-label">Prodotto</label>
+            <select class="form-input" id="val-product" onchange="updateValuta()">
+              <option value="">— seleziona —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Condizione dichiarata</label>
+            <select class="form-input" id="val-cond" onchange="updateValuta()">
+              <option value="da_riparare">Da riparare</option>
+              <option value="buone">Buone</option>
+              <option value="ottime">Ottime</option>
+              <option value="come_nuovo">Come nuovo</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Prezzo visto (€)</label>
+            <input type="number" class="form-input" id="val-price" placeholder="es. 35" oninput="updateValuta()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Condizione obiettivo di rivendita</label>
+            <select class="form-input" id="val-target" onchange="updateValuta()">
+              <option value="same">Stessa condizione</option>
+              <option value="buone">Buone</option>
+              <option value="ottime">Ottime</option>
+              <option value="come_nuovo">Come nuovo</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <div id="deal-result-area">
+            <div class="card empty-state">
+              <i class="bi bi-calculator"></i>
+              <p>Seleziona un prodotto e inserisci il prezzo</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── IMPOSTAZIONI ── -->
+    <div class="page" id="page-impostazioni">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Impostazioni</div>
+          <div class="page-subtitle">Configurazione e gestione dati</div>
+        </div>
+      </div>
+      <div style="max-width: 540px; display: flex; flex-direction: column; gap: 14px;">
+
+        <div class="card">
+          <div class="settings-section-title">Soglie promemoria</div>
+          <div class="form-group">
+            <label class="form-label">Avviso warning (giorni)</label>
+            <input type="number" class="form-input" id="thresh-warning" value="30" min="7" max="365">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Avviso critico (giorni)</label>
+            <input type="number" class="form-input" id="thresh-critical" value="60" min="7" max="365">
+          </div>
+          <button class="btn btn-primary" onclick="saveSettings()"><i class="bi bi-check-lg"></i> Salva impostazioni</button>
+        </div>
+
+        <div class="card">
+          <div class="settings-section-title">Backup dati</div>
+          <div class="settings-desc">Tutti i dati sono salvati in localStorage. Esporta regolarmente un backup per non perdere i tuoi dati.</div>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button class="btn btn-ghost" onclick="exportData()"><i class="bi bi-download"></i> Esporta JSON</button>
+            <label class="btn btn-ghost" style="cursor:pointer;">
+              <i class="bi bi-upload"></i> Importa JSON
+              <input type="file" accept=".json" onchange="importData(event)" style="display:none;">
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="settings-section-title" style="color: var(--red);">Zona pericolosa</div>
+          <div class="settings-desc">Cancella tutti i dati dell'applicazione in modo permanente. Questa operazione è irreversibile.</div>
+          <button class="btn btn-danger" onclick="clearAllData()"><i class="bi bi-trash3"></i> Cancella tutto</button>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Mobile toggle button -->
+<button class="mobile-toggle" id="mobile-toggle" onclick="toggleSidebar()">
+  <i class="bi bi-list"></i>
+</button>
+
+<!-- ════════════════ MODAL: Aggiungi/Modifica prodotto ════════════════ -->
+<div class="modal-overlay hidden" id="modal-overlay" onclick="closeModalOnOverlay(event)">
+  <div class="modal" id="modal-content">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Nuovo prodotto</div>
+      <button class="modal-close" onclick="closeModal()"><i class="bi bi-x-lg"></i></button>
+    </div>
+
+    <div class="tabs" id="modal-tabs">
+      <div class="tab active" onclick="switchTab('tab-info', this)">Informazioni</div>
+      <div class="tab" onclick="switchTab('tab-prices', this)">Prezzi</div>
+      <div class="tab" onclick="switchTab('tab-repair', this)" id="tab-repair-btn">Riparazione</div>
+    </div>
+
+    <!-- Tab Info -->
+    <div class="tab-panel active" id="tab-info">
+      <input type="hidden" id="modal-id">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Nome prodotto *</label>
+          <input type="text" class="form-input" id="modal-name" placeholder="es. PS3 Fat CECH-G">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Categoria *</label>
+          <select class="form-input" id="modal-cat" onchange="checkRepairTab()">
+            <option value="console">Console</option>
+            <option value="gioco">Gioco</option>
+            <option value="gpu">GPU / Scheda grafica</option>
+            <option value="cpu">CPU / Processore</option>
+            <option value="portatile">PC portatile</option>
+            <option value="smartphone">Smartphone</option>
+            <option value="accessorio">Accessorio</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Descrizione / note brevi</label>
+        <textarea class="form-input form-textarea" id="modal-desc" placeholder="es. Modello con lettore BD, fat originale..."></textarea>
+      </div>
+      <div class="form-group" id="quick-fixes-section">
+        <label class="form-label">Quick fix — problemi comuni</label>
+        <div id="quick-fix-list"></div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="addQuickFix()">
+          <i class="bi bi-plus-lg"></i> Aggiungi problema
+        </button>
+      </div>
+    </div>
+
+    <!-- Tab Prezzi -->
+    <div class="tab-panel" id="tab-prices">
+      <div style="font-size: 12.5px; color: var(--text2); margin-bottom: 18px; line-height: 1.6;">
+        Inserisci i prezzi medi osservati su Vinted per ogni condizione. Il dato verrà aggiunto allo storico con la data di oggi.
+      </div>
+      <div class="price-grid">
+        <div class="form-group">
+          <label class="form-label">
+            <span style="display:inline-block; width:7px; height:7px; border-radius:2px; background:var(--red); margin-right:6px; vertical-align: middle;"></span>
+            Da riparare (€)
+          </label>
+          <input type="number" class="form-input" id="p-da_riparare" placeholder="—" min="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">
+            <span style="display:inline-block; width:7px; height:7px; border-radius:2px; background:var(--amber); margin-right:6px; vertical-align: middle;"></span>
+            Buone (€)
+          </label>
+          <input type="number" class="form-input" id="p-buone" placeholder="—" min="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">
+            <span style="display:inline-block; width:7px; height:7px; border-radius:2px; background:var(--blue); margin-right:6px; vertical-align: middle;"></span>
+            Ottime (€)
+          </label>
+          <input type="number" class="form-input" id="p-ottime" placeholder="—" min="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">
+            <span style="display:inline-block; width:7px; height:7px; border-radius:2px; background:var(--green); margin-right:6px; vertical-align: middle;"></span>
+            Come nuovo (€)
+          </label>
+          <input type="number" class="form-input" id="p-come_nuovo" placeholder="—" min="0">
+        </div>
+      </div>
+      <div id="price-history-section" class="hidden">
+        <hr class="divider">
+        <div class="section-label" style="margin-bottom: 12px;">Storico prezzi</div>
+        <div class="chart-container"><canvas id="history-chart"></canvas></div>
+        <table class="history-table" id="history-table-body" style="margin-top:12px;"></table>
+      </div>
+    </div>
+
+    <!-- Tab Riparazione -->
+    <div class="tab-panel" id="tab-repair">
+      <div class="form-group">
+        <label class="form-label">Difficoltà di riparazione</label>
+        <div class="diff-options">
+          <label class="diff-label">
+            <input type="radio" name="difficulty" value="Facile" id="diff-1">
+            <span style="color:var(--green);">Facile</span>
+          </label>
+          <label class="diff-label">
+            <input type="radio" name="difficulty" value="Media">
+            <span style="color:var(--amber);">Media</span>
+          </label>
+          <label class="diff-label">
+            <input type="radio" name="difficulty" value="Difficile">
+            <span style="color:var(--red);">Difficile</span>
+          </label>
+          <label class="diff-label">
+            <input type="radio" name="difficulty" value="Specialistica">
+            <span style="color:var(--purple);">Specialistica</span>
+          </label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Note di riparazione</label>
+        <textarea class="form-input form-textarea" id="modal-repair-notes" placeholder="es. YLOD comune su Fat, richiede reball BGA. Lettore BD fragile..."></textarea>
+      </div>
+    </div>
+
+    <hr class="divider" style="margin: 0;">
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Annulla</button>
+      <button class="btn btn-primary" onclick="saveProduct()">
+        <i class="bi bi-check-lg"></i> <span id="save-btn-text">Salva prodotto</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ MODAL: Dettaglio prodotto ════════════════ -->
+<div class="modal-overlay hidden" id="detail-overlay" onclick="closeDetailOnOverlay(event)">
+  <div class="modal" style="max-width:740px;" id="detail-content">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="detail-name"></div>
+        <div id="detail-cat-badge" style="margin-top:8px;"></div>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button class="btn btn-ghost btn-sm" id="detail-edit-btn">
+          <i class="bi bi-pencil"></i> Modifica
+        </button>
+        <button class="modal-close" onclick="closeDetail()"><i class="bi bi-x-lg"></i></button>
+      </div>
+    </div>
+    <div id="detail-body"></div>
+  </div>
+</div>
+
+<script>
+// ── Mobile sidebar toggle ──
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebar-backdrop');
+  const isOpen = sidebar.classList.contains('open');
+  sidebar.classList.toggle('open', !isOpen);
+  backdrop.classList.toggle('visible', !isOpen);
+}
+</script>
+<script src="js/script.js"></script>
+</body>
+</html>
