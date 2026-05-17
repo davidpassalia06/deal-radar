@@ -14,7 +14,7 @@
 <body>
 
 <!-- Sidebar backdrop for mobile -->
-<div class="sidebar-backdrop" id="sidebar-backdrop" onclick="toggleSidebar()"></div>
+<div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
 <div class="app">
   <!-- ════════════════ SIDEBAR ════════════════ -->
@@ -92,6 +92,7 @@
           <i class="bi bi-plus-lg"></i> Aggiungi
         </button>
       </div>
+      <div id="breadcrumb-nav" class="breadcrumb-nav" style="display:none;"></div>
       <div class="filter-row">
         <div class="search-bar" style="flex:1; min-width:180px;">
           <i class="bi bi-search"></i>
@@ -179,6 +180,28 @@
         </div>
 
         <div class="card">
+          <div class="settings-section-title">Tema</div>
+          <div class="settings-desc">Scegli l'aspetto dell'applicazione.</div>
+          <div class="theme-picker" id="theme-picker">
+            <button class="theme-btn active" data-theme="dark" onclick="applyTheme('dark');save();">
+              <i class="bi bi-moon-stars-fill"></i> Dark
+            </button>
+            <button class="theme-btn" data-theme="amoled" onclick="applyTheme('amoled');save();">
+              <i class="bi bi-circle-fill"></i> AMOLED
+            </button>
+            <button class="theme-btn" data-theme="light" onclick="applyTheme('light');save();">
+              <i class="bi bi-sun-fill"></i> Light
+            </button>
+            <button class="theme-btn" data-theme="nord" onclick="applyTheme('nord');save();">
+              <i class="bi bi-snow"></i> Nord
+            </button>
+            <button class="theme-btn" data-theme="dracula" onclick="applyTheme('dracula');save();">
+              <i class="bi bi-droplet-fill"></i> Dracula
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
           <div class="settings-section-title">Backup dati</div>
           <div class="settings-desc">Tutti i dati sono salvati in localStorage. Esporta regolarmente un backup per non perdere i tuoi dati.</div>
           <div style="display: flex; gap: 10px; flex-wrap: wrap;">
@@ -245,6 +268,11 @@
       <div class="form-group">
         <label class="form-label">Descrizione / note brevi</label>
         <textarea class="form-input form-textarea" id="modal-desc" placeholder="es. Modello con lettore BD, fat originale..."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Percorso navigazione (breadcrumb)</label>
+        <input type="text" class="form-input" id="modal-breadcrumb" placeholder="es. Console > Nintendo > Switch">
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Separa i livelli con &gt;  &nbsp;|&nbsp;  es. Console &gt; Sony &gt; PlayStation 3 &gt; PS3 Fat</div>
       </div>
       <div class="form-group" id="quick-fixes-section">
         <label class="form-label">Quick fix — problemi comuni</label>
@@ -356,16 +384,6 @@
   </div>
 </div>
 
-<script>
-// ── Mobile sidebar toggle ──
-function toggleSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  const backdrop = document.getElementById('sidebar-backdrop');
-  const isOpen = sidebar.classList.contains('open');
-  sidebar.classList.toggle('open', !isOpen);
-  backdrop.classList.toggle('visible', !isOpen);
-}
-</script>
 <script src="js/script.js"></script>
 </body>
 </html>
