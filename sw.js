@@ -4,7 +4,7 @@
 // Questo invalida la vecchia cache e forza il download dei file aggiornati.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'v1.0.2';
+const CACHE_VERSION = 'v1.0.3';
 const CACHE_NAME = `dealradar-${CACHE_VERSION}`;
 
 // File locali da precachare all'installazione
