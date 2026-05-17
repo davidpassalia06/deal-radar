@@ -39,21 +39,6 @@ Cinque temi selezionabili dalle impostazioni: Dark, AMOLED (puro nero per scherm
 
 ---
 
-## Database incluso
-
-Il repository include un backup JSON con **35 prodotti** pre-configurati:
-
-| Categoria | Prodotti |
-|-----------|----------|
-| Console | PlayStation 1, 2, 3 (Fat/Slim/Super Slim), 4 · Xbox 360 (Fat/Slim), Xbox One (Fat/S) · Nintendo Wii, Wii U, Switch (Standard/Lite/OLED) · GameCube · 3DS, 3DS XL, New 3DS XL, 2DS |
-| GPU | RTX 3050, 3060, 3070, 3080 · RTX 4060, 4060 Ti, 4070, 4070 Super, 4070 Ti, 4080, 4080 Super |
-| Controller | DualShock 3, DualShock 4 · Controller Xbox 360, Xbox One |
-
-Per ogni prodotto sono già presenti: difficoltà di riparazione, problemi comuni, quick fix con link iFixit, info CFW/homebrew, info storage/SSD, breadcrumb di navigazione.
-
-Per importarlo: **Impostazioni → Importa JSON** → seleziona `dealradar-backup-final.json`.
-
----
 
 ## Installazione come PWA
 
@@ -98,7 +83,6 @@ dealradar/
 │   ├── icon-512.png
 │   ├── icon-maskable-192.png
 │   └── icon-maskable-512.png
-└── dealradar-backup-final.json    # Database prodotti pre-configurato
 ```
 
 ---
@@ -113,16 +97,6 @@ const CACHE_VERSION = 'v1.0.1'; // ← incrementa qui
 ```
 
 Gli utenti vedranno automaticamente un banner "Aggiornamento disponibile" con un bottone per ricaricare.
-
----
-
-## Hosting su GitHub Pages
-
-1. Vai su **Settings → Pages** nel repository
-2. Source: `Deploy from a branch` → `main` → `/ (root)`
-3. Salva — l'app sarà disponibile su `https://tuonome.github.io/dealradar/`
-
-> Il service worker richiede HTTPS, che GitHub Pages fornisce automaticamente.
 
 ---
 
