@@ -22,7 +22,7 @@ const THEMES = {
   amoled: {
     label: 'AMOLED', icon: 'bi-circle-fill',
     vars: {
-      '--bg0':'#000000','--bg1':'#0a0a0a','--bg2':'#000000', '--bg3':'#1a1f2e',
+      '--bg0':'#000000','--bg1':'#0a0a0a','--bg2':'#000000', '--bg3':'#111111',
       '--surface':'#111111','--surface2':'#111111',
       '--border':'rgba(255,255,255,0.06)','--border1':'rgba(255,255,255,0.09)',
       '--text1':'#ffffff','--text2':'#888888','--text3':'#444444',
@@ -264,11 +264,27 @@ function productCardHtml(p) {
   const d=daysAgo(lastDate(p));const fc=freshnessClass(d);
   const dotColor=fc==='fresh'?'var(--green)':fc==='stale'?'var(--amber)':'var(--red)';
   const priceRows=CONDS.map(c=>{const v=latestPrice(p,c);if(!v)return'';return`<div class="price-row"><span class="price-cond">${COND_LABELS[c]}</span><span class="price-val" style="color:${COND_COLORS[c]}">${formatEur(v)}</span></div>`;}).join('');
+  const liqResult=liquidityScore(p);const liq=liqResult.value;const stab=liqResult.stability;
+  const ll=liquidityLabel(liq);
+  const liqBarColor=liq>=75?'var(--green)':liq>=50?'var(--amber)':'var(--red)';
+  const stabText = stab?.avgCvPct!=null
+    ? `Volatilità storica: ${stab.avgCvPct}% CV · ${stab.detail}`
+    : null;
   return`<div class="product-card" onclick="openDetail('${p.id}')">
     <div class="cat-badge cat-${p.category}"><i class="bi ${catIcon(p.category)}"></i> ${CATS[p.category]||p.category}</div>
     <h3>${p.name}</h3>
     <div class="product-desc">${p.desc||'—'}</div>
     ${priceRows||'<div style="font-size:12px;color:var(--text3);">Nessun prezzo inserito</div>'}
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+        <span style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Liquidit\u00e0</span>
+        <span style="font-size:11px;font-weight:700;color:${ll.color};">${liq}/100 \u2014 ${ll.label}</span>
+      </div>
+      <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;">
+        <div style="height:100%;width:${liq}%;background:${liqBarColor};border-radius:2px;"></div>
+      </div>
+      ${stabText ? `<div style="font-size:10px;color:var(--text3);margin-top:4px;">${stabText}</div>` : ''}
+    </div>
     <div class="freshness-info"><span class="freshness-dot" style="background:${dotColor};"></span><span class="${fc}">${freshnessLabel(d)}</span></div>
   </div>`;
 }
@@ -383,8 +399,57 @@ function openDetail(id) {
     ${aiHtml}
     ${p.desc?`<div class="card card-sm"><div style="font-size:12px;color:var(--text3);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Note</div><div style="font-size:13.5px;color:var(--text2);line-height:1.6;">${p.desc}</div></div>`:''}
   `;
+  // Liquidità editabile inline
+  const liqRes = liquidityScore(p);
+  const liqLbl = liquidityLabel(liqRes.value);
+  const liqHtml = `<div class="card card-sm" style="margin-top:16px;margin-bottom:0;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;">Liquidità</span>
+      <span style="font-size:12px;font-weight:700;color:${liqLbl.color};" id="liq-label-${p.id}">${liqRes.value}/100 — ${liqLbl.label}</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <input type="range" min="0" max="100" value="${liqRes.value}" style="flex:1;accent-color:var(--accent);"
+        oninput="updateLiqSlider('${p.id}',this.value)">
+      <input type="number" min="0" max="100" value="${liqRes.value}" id="liq-input-${p.id}"
+        class="form-input" style="width:58px;text-align:center;padding:4px 6px;font-size:13px;"
+        oninput="updateLiqSlider('${p.id}',this.value)">
+    </div>
+    <button class="btn btn-primary btn-sm" style="margin-top:10px;width:100%;" onclick="saveLiquidity('${p.id}')">
+      <i class="bi bi-check-lg"></i> Salva liquidità
+    </button>
+  </div>`;
+  // Append after detail-body
+  const existingLiq = document.getElementById('liq-widget-'+p.id);
+  if(existingLiq) existingLiq.remove();
+  const liqDiv = document.createElement('div');
+  liqDiv.id = 'liq-widget-'+p.id;
+  liqDiv.innerHTML = liqHtml;
+  document.getElementById('detail-body').appendChild(liqDiv);
+
   document.getElementById('detail-overlay').classList.remove('hidden');
   setTimeout(()=>renderDetailChart(chartId,p),50);
+}
+
+function updateLiqSlider(id, val) {
+  val = Math.max(0, Math.min(100, parseInt(val)||0));
+  const inp = document.getElementById('liq-input-'+id);
+  if(inp) inp.value = val;
+  // Sync range input
+  const wrap = document.getElementById('liq-widget-'+id);
+  if(wrap) { const range = wrap.querySelector('input[type=range]'); if(range) range.value = val; }
+  // Update label live
+  const lbl = document.getElementById('liq-label-'+id);
+  if(lbl) { const ll = liquidityLabel(val); lbl.textContent = val+'/100 — '+ll.label; lbl.style.color = ll.color; }
+}
+
+function saveLiquidity(id) {
+  const p = db.products.find(x=>x.id===id); if(!p) return;
+  const inp = document.getElementById('liq-input-'+id);
+  const val = Math.max(0, Math.min(100, parseInt(inp?.value)||0));
+  p.liquidityBase = val;
+  save(); renderCatalog(); renderDashboard();
+  const btn = document.querySelector(`#liq-widget-${id} button`);
+  if(btn){btn.innerHTML='<i class="bi bi-check-lg"></i> Salvato!';setTimeout(()=>{btn.innerHTML='<i class="bi bi-check-lg"></i> Salva liquidità';},1500);}
 }
 
 function buildAiPrompt(p) {
@@ -443,6 +508,7 @@ function openAddModal() {
   document.getElementById('price-history-section').classList.add('hidden');
   document.getElementById('modal-title').textContent='Nuovo prodotto';
   document.getElementById('save-btn-text').textContent='Salva prodotto';
+  document.getElementById('delete-product-btn')?.classList.add('hidden');
   switchTabById('tab-info'); checkRepairTab();
   document.getElementById('modal-overlay').classList.remove('hidden');
 }
@@ -461,6 +527,7 @@ function openEditModal(id) {
   (p.quickFixes||[]).forEach(f=>addQuickFix(f.label,f.query));
   document.getElementById('modal-title').textContent='Modifica prodotto';
   document.getElementById('save-btn-text').textContent='Aggiorna';
+  document.getElementById('delete-product-btn')?.classList.remove('hidden');
   const hasHistory=CONDS.some(c=>(p.prices?.[c]||[]).length>1);
   if(hasHistory){document.getElementById('price-history-section').classList.remove('hidden');setTimeout(()=>renderHistoryChart(p),80);renderHistoryTable(p);}
   else{document.getElementById('price-history-section').classList.add('hidden');}
@@ -500,6 +567,14 @@ function addQuickFix(label='',query='') {
   document.getElementById('quick-fix-list').appendChild(div);
 }
 
+function deleteProductFromModal() {
+  const id = document.getElementById('modal-id').value; if(!id) return;
+  const p = db.products.find(x=>x.id===id); if(!p) return;
+  if(!confirm(`Eliminare "${p.name}" definitivamente?`)) return;
+  db.products = db.products.filter(x=>x.id!==id);
+  save(); closeModal(); renderDashboard(); renderCatalog(); renderValuta();
+}
+
 function saveProduct() {
   const name=document.getElementById('modal-name').value.trim();
   if(!name){alert('Inserisci il nome del prodotto');return;}
@@ -532,35 +607,368 @@ function saveProduct() {
   save(); closeModal(); renderDashboard(); renderCatalog(); renderValuta();
 }
 
+// ── VINTED FEES ───────────────────────────────────────────────────────────────
+// Tariffe spedizione Vinted per dimensione prodotto (stime medie carrier integrati)
+// Tariffe spedizione Vinted Italia (aggiornate, fonte: Vinted + BRT/InPost 2024-2025)
+// Vinted Go integrato: S ≤500g=€2.99, M ≤1kg=€3.49, L ≤2kg=€4.49
+// Oltre 2kg → spedizione personalizzata (BRT/GLS/Poste): ~€7-13 in base al peso
+// Le console home vengono quasi sempre spedite senza scatola originale,
+// quindi si considera solo il peso della console nuda + bubble wrap minimo.
+const SHIPPING_SIZES = {
+  // Controller, giochi, accessori piccoli (~200-500g) → pacco S Vinted
+  accessorio: { label: 'Pacco S (≤500g)',   ship: 2.99 },
+  gioco:      { label: 'Pacco S (≤500g)',   ship: 2.99 },
+  cpu:        { label: 'Pacco S (≤500g)',   ship: 2.99 },
+  // GPU (~800g-1.4kg), smartphone (~200g+imballo), PSP/GBA → pacco M
+  gpu:        { label: 'Pacco M (≤1kg)',    ship: 3.49 },
+  smartphone: { label: 'Pacco M (≤1kg)',    ship: 3.49 },
+  // Laptop/console portatili (~2kg con imballo) → pacco L Vinted (limite 2kg)
+  portatile:  { label: 'Pacco L (≤2kg)',    ship: 4.49 },
+  // Console home: peso reale senza scatola originale:
+  //   GBA/PSP/DS/Vita ~200-300g → categoria portatile
+  //   Switch nuda ~300g, con dock ~600g → pacco M/L
+  //   PS4 Slim ~2.1kg, Switch OLED ~420g, Wii ~1.3kg → personalizzata ~€7.99
+  //   PS3 Fat ~3.5kg, Xbox 360 ~3.2kg → personalizzata pesante ~€9.99
+  //   La categoria 'console' è usata per console home medie (PS4/Switch/Wii)
+  console:    { label: 'Personalizzata (>2kg)', ship: 7.99 },
+};
+
+// Peso stimato console naked (senza scatola) per nota informativa
+const CONSOLE_WEIGHTS = {
+  'Game Boy': 90, 'Game Boy Pocket': 70, 'Game Boy Color': 80,
+  'Game Boy Advance': 95, 'Game Boy Advance SP': 143,
+  'Nintendo DS': 275, 'Nintendo DS Lite': 218, 'Nintendo DSi': 214,
+  'Nintendo 3DS': 235, 'Nintendo 2DS': 260, 'New 3DS XL': 329,
+  'PSP': 189, 'PS Vita': 260,
+  'Switch Lite': 275, 'Nintendo Switch': 297,
+  'Switch OLED': 420,
+  'Wii': 1200, 'Wii Mini': 1000, 'Wii U': 1600,
+  'NES': 1400, 'SNES': 700, 'GameCube': 1500,
+  'PS1': 900, 'PSone': 450, 'PS2 Fat': 2400, 'PS2 Slim': 900,
+  'PS3 Fat': 3500, 'PS3 Slim': 2100, 'PS3 Super Slim': 2100,
+  'PS4': 2800, 'PS4 Slim': 2100, 'PS4 Pro': 3300,
+  'Xbox 360': 3200, 'Xbox 360 Slim': 2900, 'Xbox One': 3200, 'Xbox One S': 2900, 'Xbox One X': 3810,
+};
+
+// Ritorna la fascia spedizione corretta per una console specifica
+function shippingForProduct(p) {
+  if (p.category !== 'console' && p.category !== 'portatile') {
+    return SHIPPING_SIZES[p.category] || SHIPPING_SIZES.accessorio;
+  }
+  // Cerca peso per nome (match parziale)
+  const name = p.name.toLowerCase();
+  let weightG = null;
+  for (const [key, w] of Object.entries(CONSOLE_WEIGHTS)) {
+    if (name.includes(key.toLowerCase())) { weightG = w; break; }
+  }
+  // Fallback: portatile 400g, console home 2200g
+  if (weightG === null) weightG = p.category === 'portatile' ? 400 : 2200;
+  // +400g imballo (bubble wrap + scatola)
+  const totalG = weightG + 400;
+  if (totalG <= 500)  return { label: `Pacco S (${Math.round(totalG/100)*100}g stimati)`, ship: 2.99 };
+  if (totalG <= 1000) return { label: `Pacco M (${Math.round(totalG/100)*100}g stimati)`, ship: 3.49 };
+  if (totalG <= 2000) return { label: `Pacco L (${Math.round(totalG/100)*100}g stimati)`, ship: 4.49 };
+  if (totalG <= 3000) return { label: `Personalizzata (~${Math.round(totalG/1000*10)/10}kg)`, ship: 7.99 };
+  return { label: `Personalizzata (~${Math.round(totalG/1000*10)/10}kg)`, ship: 9.99 };
+}
+// Protezione acquisti Vinted: 5% del prezzo + €0.70, min €0.70
+function vintedBuyerProtection(price) { return Math.max(0.70, price * 0.05 + 0.70); }
+function vintedTotalCostBuyer(price, p) {
+  const shipInfo = shippingForProduct(p);
+  const prot = vintedBuyerProtection(price);
+  return { ship: shipInfo.ship, shipLabel: shipInfo.label, prot, total: price + shipInfo.ship + prot };
+}
+
+// ── LIQUIDITY SCORE ───────────────────────────────────────────────────────────
+// Segnale corretto (Jankowitsch et al., ricerca C2C price dispersion):
+// mercati liquidi = prezzi STABILI nel tempo per ciascuna condizione (bassa varianza).
+// Alta varianza storica = incertezza/asimmetria informativa = illiquidità.
+// Misuriamo il coefficiente di variazione (CV = σ/μ) per ogni condizione con ≥2 osservazioni.
+
+function priceStabilityAnalysis(p) {
+  const cvs = [];
+
+  for (const c of CONDS) {
+    const hist = p.prices?.[c] || [];
+    if (hist.length < 2) continue;
+    const vals = hist.map(e => e.value);
+    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+    if (mean === 0) continue;
+    const variance = vals.reduce((a, v) => a + (v - mean) ** 2, 0) / vals.length;
+    const cv = Math.sqrt(variance) / mean; // 0 = stabile, 1 = molto volatile
+    cvs.push(cv);
+  }
+
+  if (cvs.length === 0) return { score: 0, detail: 'storico insufficiente', avgCvPct: null, condCount: 0 };
+
+  const avgCv = cvs.reduce((a, b) => a + b, 0) / cvs.length;
+  const avgCvPct = Math.round(avgCv * 100);
+
+  // CV basso = consensus di mercato = alta liquidità
+  // CV alto = incertezza/asimmetria informativa = bassa liquidità
+  // Soglie calibrate su mercato secondhand electronics:
+  // <5%  → consensus forte, prezzi stabili   → +15 pt
+  // 5-12% → buona stabilità                  → +8 pt
+  // 12-20% → volatilità moderata             → 0 pt
+  // 20-35% → alta incertezza                 → -8 pt
+  // >35%  → mercato caotico                  → -15 pt
+  let score;
+  if (avgCv < 0.05)       score = 15;
+  else if (avgCv < 0.12)  score = 8;
+  else if (avgCv < 0.20)  score = 0;
+  else if (avgCv < 0.35)  score = -8;
+  else                    score = -15;
+
+  let detail;
+  if (avgCv < 0.05)       detail = 'prezzi stabili';
+  else if (avgCv < 0.12)  detail = 'buona stabilità';
+  else if (avgCv < 0.20)  detail = 'volatilità moderata';
+  else if (avgCv < 0.35)  detail = 'alta incertezza';
+  else                    detail = 'prezzi molto volatili';
+
+  return { score, detail, avgCvPct, condCount: cvs.length };
+}
+
+function liquidityScore(p) {
+  const value = Math.max(0, Math.min(100, p.liquidityBase ?? 50));
+  return { value, stability: { detail: null, avgCvPct: null } };
+}
+
+function liquidityLabel(score) {
+  if(score>=75) return {label:'Alta',color:'var(--green)'};
+  if(score>=50) return {label:'Media',color:'var(--amber)'};
+  if(score>=25) return {label:'Bassa',color:'var(--red)'};
+  return {label:'Molto bassa',color:'#ef4444'};
+}
+
+// ── BID-ASK SPREAD ────────────────────────────────────────────────────────────
+// Stima spread: differenza % tra prezzo di acquisto realistico (domanda) e rivendita (offerta)
+// Basata su volatilità storica e categoria
+function estimateSpread(p, cond) {
+  // Spread base per categoria
+  const catSpread = { gioco:8, smartphone:12, accessorio:10, console:15, gpu:18, cpu:14, portatile:20 };
+  let spread = catSpread[p.category] || 15;
+
+  // Se abbiamo dati storici per la condizione, calcola volatilità reale
+  const hist = p.prices?.[cond] || [];
+  if(hist.length>=3) {
+    const vals = hist.map(e=>e.value);
+    const mean = vals.reduce((a,b)=>a+b,0)/vals.length;
+    const variance = vals.reduce((a,v)=>a+(v-mean)**2,0)/vals.length;
+    const stdDev = Math.sqrt(variance);
+    const cv = (stdDev/mean)*100;
+    spread = Math.max(5, Math.min(40, Math.round(cv*1.5)));
+  }
+
+  // Correttivo liquidità (market microstructure: spread ∝ 1/liquidità)
+  // liquidityBase 100 → fattore 0.75 (spread -25%)
+  // liquidityBase 50  → fattore 1.00 (neutro)
+  // liquidityBase 0   → fattore 1.25 (spread +25%)
+  const liq = p.liquidityBase ?? 50;
+  const liquidityFactor = 1 + (50 - liq) / 200;
+  spread = Math.max(3, Math.min(50, Math.round(spread * liquidityFactor)));
+
+  return spread; // %
+}
+
 // ── VALUTA AFFARE ─────────────────────────────────────────────────────────────
+// Searchable product select state
+let valutaSelectedId = '';
+
 function renderValuta() {
-  const sel=document.getElementById('val-product'); if(!sel) return;
-  const cur=sel.value;
-  sel.innerHTML='<option value="">— seleziona —</option>'+db.products.map(p=>`<option value="${p.id}" ${p.id===cur?'selected':''}>${p.name}</option>`).join('');
+  // Re-build the hidden select for compatibility, but render custom UI
+  const sel = document.getElementById('val-product'); if(!sel) return;
+  const old = valutaSelectedId;
+  sel.innerHTML = '<option value="">— seleziona —</option>' +
+    db.products.map(p=>`<option value="${p.id}" ${p.id===old?'selected':''}>${p.name}</option>`).join('');
+  if(old) sel.value = old;
+
+  // Build searchable widget if not yet present
+  if(!document.getElementById('val-product-search-wrap')) {
+    buildSearchableProductSelect();
+  } else {
+    refreshSearchableOptions('');
+  }
   updateValuta();
 }
+
+function buildSearchableProductSelect() {
+  const orig = document.getElementById('val-product');
+  if(!orig) return;
+  orig.style.display = 'none';
+
+  const wrap = document.createElement('div');
+  wrap.id = 'val-product-search-wrap';
+  wrap.style.cssText = 'position:relative;';
+
+  wrap.innerHTML = `
+    <div id="val-search-input-wrap" style="position:relative;">
+      <i class="bi bi-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:13px;pointer-events:none;"></i>
+      <input type="text" id="val-search-input" class="form-input" placeholder="Cerca prodotto..." autocomplete="off"
+        style="padding-left:34px;"
+        oninput="refreshSearchableOptions(this.value)"
+        onfocus="document.getElementById('val-dropdown').style.display='block'"
+        onblur="setTimeout(()=>document.getElementById('val-dropdown').style.display='none',160)"
+      >
+    </div>
+    <div id="val-dropdown" style="display:none;position:absolute;z-index:200;left:0;right:0;top:calc(100% + 4px);background:var(--surface);border:1px solid var(--border1);border-radius:var(--radius-sm);max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.35);">
+      <div id="val-dropdown-list"></div>
+    </div>
+  `;
+  orig.parentNode.insertBefore(wrap, orig.nextSibling);
+  refreshSearchableOptions('');
+}
+
+function refreshSearchableOptions(q) {
+  const list = document.getElementById('val-dropdown-list'); if(!list) return;
+  const filter = q.toLowerCase();
+  const matches = db.products.filter(p => !filter || p.name.toLowerCase().includes(filter) || (p.desc||'').toLowerCase().includes(filter));
+  if(!matches.length) {
+    list.innerHTML = '<div style="padding:12px 14px;font-size:13px;color:var(--text3);">Nessun prodotto trovato</div>';
+    return;
+  }
+  list.innerHTML = matches.map(p => {
+    const sel = p.id === valutaSelectedId;
+    return `<div class="val-dropdown-item${sel?' selected':''}" onmousedown="selectValProduct('${p.id}','${p.name.replace(/'/g,"&#39;")}')"
+      style="padding:10px 14px;cursor:pointer;font-size:13.5px;color:${sel?'var(--accent)':'var(--text1)'};background:${sel?'var(--accent-dim)':'transparent'};display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);">
+      <i class="bi ${catIcon(p.category)}" style="color:var(--text3);font-size:12px;flex-shrink:0;"></i>
+      ${p.name}
+    </div>`;
+  }).join('');
+}
+
+function selectValProduct(id, name) {
+  valutaSelectedId = id;
+  const orig = document.getElementById('val-product');
+  if(orig) orig.value = id;
+  const inp = document.getElementById('val-search-input');
+  if(inp) inp.value = name;
+  const drop = document.getElementById('val-dropdown');
+  if(drop) drop.style.display = 'none';
+  updateValuta();
+}
+
 function updateValuta() {
-  const pid=document.getElementById('val-product')?.value;
-  const cond=document.getElementById('val-cond')?.value;
-  const price=parseFloat(document.getElementById('val-price')?.value);
-  const target=document.getElementById('val-target')?.value;
-  const area=document.getElementById('deal-result-area'); if(!area) return;
+  const pid = valutaSelectedId || document.getElementById('val-product')?.value;
+  const cond = document.getElementById('val-cond')?.value;
+  const price = parseFloat(document.getElementById('val-price')?.value);
+  const target = document.getElementById('val-target')?.value;
+  const area = document.getElementById('deal-result-area'); if(!area) return;
   if(!pid||!cond||isNaN(price)){area.innerHTML=`<div class="card" style="text-align:center;padding:40px 20px;color:var(--text3);"><i class="bi bi-calculator" style="font-size:32px;display:block;margin-bottom:12px;"></i>Seleziona un prodotto e inserisci il prezzo</div>`;return;}
   const p=db.products.find(x=>x.id===pid); if(!p) return;
   const avg=latestPrice(p,cond);
   if(!avg){area.innerHTML=`<div class="card" style="text-align:center;padding:30px;color:var(--text3);">Nessun prezzo medio per questa condizione.</div>`;return;}
+
+  // Base deal assessment — soglie: ottimo <-25%, buon -25%/-15%, discreto -15%/0%, norma 0%/+10%, alto >+10%
   const diff=avg-price; const pct=Math.round((diff/avg)*100);
   let verdict,vClass,fillW,fillColor,suggestion;
-  if(diff>avg*0.2){verdict='Ottimo affare';vClass='great';fillW=90;fillColor='var(--green)';suggestion='Il prezzo è significativamente sotto la media. Vale la pena.';}
-  else if(diff>0){verdict='Buon affare';vClass='great';fillW=60;fillColor='var(--green)';suggestion='Il prezzo è sotto la media. Discretamente conveniente.';}
-  else if(diff>-avg*0.1){verdict='Prezzo nella norma';vClass='ok';fillW=40;fillColor='var(--amber)';suggestion='Il prezzo è in linea con la media di mercato.';}
-  else{verdict='Prezzo alto';vClass='bad';fillW=15;fillColor='var(--red)';suggestion='Prezzi troppo alti. Tratta o passa oltre.';}
+  if(diff>avg*0.25){verdict='Ottimo affare';vClass='great';fillW=95;fillColor='var(--green)';suggestion='Il prezzo è >25% sotto la media. Raro — acquista senza esitare.';}
+  else if(diff>avg*0.15){verdict='Buon affare';vClass='great';fillW=78;fillColor='var(--green)';suggestion='Il prezzo è tra il 15% e il 25% sotto la media. Vale decisamente la pena.';}
+  else if(diff>0){verdict='Discreto';vClass='ok';fillW=55;fillColor='var(--amber)';suggestion='Sotto la media, ma di poco. Tratta se puoi, altrimenti va bene.';}
+  else if(diff>-avg*0.1){verdict='Prezzo nella norma';vClass='ok';fillW=35;fillColor='var(--amber)';suggestion='Il prezzo è in linea con la media di mercato.';}
+  else{verdict='Prezzo alto';vClass='bad';fillW=12;fillColor='var(--red)';suggestion='Prezzo sopra la media. Tratta o passa oltre.';}
+
+  // Nota console: prezzo include cavi + controller (standard Vinted elettronica)
+  const isConsole = p.category === 'console' || p.category === 'portatile';
+  const consoleNoteHtml = isConsole ? `<div style="background:rgba(99,102,241,0.07);border:1px solid rgba(99,102,241,0.18);border-radius:8px;padding:9px 13px;margin-top:10px;font-size:12px;color:var(--text3);display:flex;align-items:center;gap:7px;"><i class="bi bi-info-circle" style="color:var(--blue);flex-shrink:0;"></i> Il prezzo di riferimento assume che la console includa <strong style="color:var(--text2);">cavi (alimentazione + HDMI/AV) e almeno un controller</strong>. Senza accessori il valore cala del 15-25%.</div>` : '';
+
+  // Vinted costs
+  const fees = vintedTotalCostBuyer(price, p);
+  const feesHtml = `<div style="background:var(--surface2);border-radius:8px;padding:14px 16px;margin-top:14px;">
+    <div style="font-size:11px;color:var(--text3);text-transform:uppercase;font-weight:600;letter-spacing:0.05em;margin-bottom:10px;display:flex;align-items:center;gap:6px;"><i class="bi bi-receipt" style="color:var(--accent);"></i> Costi Vinted (acquirente)</div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">Prezzo oggetto</span><span style="font-weight:600;">€${price.toFixed(2)}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">Spedizione <span style="color:var(--text3);font-size:11px;">(${fees.shipLabel})</span></span><span style="font-weight:600;">€${fees.ship.toFixed(2)}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">Protezione acquisti Vinted</span><span style="font-weight:600;">€${fees.prot.toFixed(2)}</span></div>
+      <div style="border-top:1px solid var(--border);padding-top:8px;display:flex;justify-content:space-between;"><span style="font-size:12px;color:var(--text2);font-weight:600;">Totale pagato</span><span style="font-size:17px;font-weight:700;color:var(--accent);">€${fees.total.toFixed(2)}</span></div>
+    </div>
+  </div>`;
+
+  // Spread bid-ask
+  const spreadPct = estimateSpread(p, cond);
+  const spreadAbs = Math.round(avg * spreadPct / 100);
+  const bid = Math.round(avg * (1 - spreadPct/200));
+  const ask = Math.round(avg * (1 + spreadPct/200));
+  const spreadColor = spreadPct<=10?'var(--green)':spreadPct<=20?'var(--amber)':'var(--red)';
+  const spreadHtml = `<div style="background:var(--surface2);border-radius:8px;padding:14px 16px;margin-top:14px;">
+    <div style="font-size:11px;color:var(--text3);text-transform:uppercase;font-weight:600;letter-spacing:0.05em;margin-bottom:10px;display:flex;align-items:center;gap:6px;"><i class="bi bi-arrows-expand" style="color:${spreadColor};"></i> Spread bid-ask stimato</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;margin-bottom:10px;">
+      <div style="background:var(--bg1);border-radius:6px;padding:8px;"><div style="font-size:10px;color:var(--green);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Bid</div><div style="font-size:16px;font-weight:700;color:var(--green);">€${bid}</div><div style="font-size:10px;color:var(--text3);">acquisto</div></div>
+      <div style="background:var(--bg1);border-radius:6px;padding:8px;"><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Spread</div><div style="font-size:16px;font-weight:700;color:${spreadColor};">${spreadPct}%</div><div style="font-size:10px;color:var(--text3);">~€${spreadAbs}</div></div>
+      <div style="background:var(--bg1);border-radius:6px;padding:8px;"><div style="font-size:10px;color:var(--red);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Ask</div><div style="font-size:16px;font-weight:700;color:var(--red);">€${ask}</div><div style="font-size:10px;color:var(--text3);">rivendita</div></div>
+    </div>
+    <div style="font-size:11.5px;color:var(--text3);">Spread ${spreadPct<=10?'stretto — mercato liquido':spreadPct<=20?'medio — negoziazione consigliata':'ampio — mercato volatile, tratta il prezzo'}.</div>
+  </div>`;
+
+  // Margin block
   const tCond=target==='same'?cond:target; const tPrice=latestPrice(p,tCond);
   let marginHtml='';
-  if(tPrice&&tCond!==cond){const margin=tPrice-price;const mColor=margin>0?'var(--green)':'var(--red)';marginHtml=`<div style="background:var(--surface2);border-radius:8px;padding:14px 16px;margin-top:14px;"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;font-weight:600;letter-spacing:0.05em;margin-bottom:8px;">Margine potenziale</div><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;"><span style="color:var(--text2)">Compri (${COND_LABELS[cond]})</span><span style="font-weight:600;">€${Math.round(price)}</span></div><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:10px;"><span style="color:var(--text2)">Rivendi (${COND_LABELS[tCond]})</span><span style="font-weight:600;">~€${Math.round(tPrice)}</span></div><div style="border-top:1px solid var(--border);padding-top:10px;display:flex;justify-content:space-between;"><span style="font-size:12px;color:var(--text2);">Margine lordo stimato</span><span style="font-size:18px;font-weight:700;color:${mColor};">${margin>0?'+':''}€${Math.round(margin)}</span></div></div>`;}
+  if(tPrice&&tCond!==cond){
+    const margin=tPrice-price;
+    const marginNet=margin-fees.ship-fees.prot;
+    const mColor=margin>0?'var(--green)':'var(--red)';
+    const mnColor=marginNet>0?'var(--green)':'var(--red)';
+    marginHtml=`<div style="background:var(--surface2);border-radius:8px;padding:14px 16px;margin-top:14px;">
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;font-weight:600;letter-spacing:0.05em;margin-bottom:8px;">Margine potenziale</div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;"><span style="color:var(--text2)">Compri (${COND_LABELS[cond]})</span><span style="font-weight:600;">€${Math.round(price)}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;"><span style="color:var(--text2)">Rivendi (${COND_LABELS[tCond]})</span><span style="font-weight:600;">~€${Math.round(tPrice)}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border);"><span style="color:var(--text2)">Margine lordo</span><span style="font-weight:600;color:${mColor};">${margin>0?'+':''}€${Math.round(margin)}</span></div>
+      <div style="display:flex;justify-content:space-between;"><span style="font-size:12px;color:var(--text2);">Netto (al netto spedizione+protezione)</span><span style="font-size:18px;font-weight:700;color:${mnColor};">${marginNet>0?'+':''}€${Math.round(marginNet)}</span></div>
+    </div>`;
+  }
+
   let diffHtml='';
   if(p.difficulty==='Difficile'||p.difficulty==='Specialistica')diffHtml=`<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:10px 14px;margin-top:12px;font-size:12.5px;color:var(--amber);"><i class="bi bi-wrench"></i> Riparazione ${p.difficulty} — considera i costi nel margine.</div>`;
-  area.innerHTML=`<div class="deal-result"><div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:8px;"><div class="verdict ${vClass}">${verdict}</div><div style="text-align:right;"><div style="font-size:11px;color:var(--text3);margin-bottom:2px;">Media mercato</div><div style="font-size:16px;font-weight:700;">${formatEur(avg)}</div></div></div><div style="font-size:13px;color:var(--text2);margin-bottom:10px;">${suggestion}</div><div class="deal-meter"><div class="deal-meter-fill" style="width:${fillW}%;background:${fillColor};"></div></div><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);"><span>Caro</span><span>In linea</span><span>Affare</span></div><div style="margin-top:14px;display:flex;gap:16px;flex-wrap:wrap;"><div><div style="font-size:11px;color:var(--text3);">Prezzo visto</div><div style="font-size:20px;font-weight:700;">€${Math.round(price)}</div></div><div><div style="font-size:11px;color:var(--text3);">Differenza</div><div style="font-size:20px;font-weight:700;color:${diff>0?'var(--green)':'var(--red)'};">${diff>0?'+':''}€${Math.round(diff)} (${pct>0?'+':''}${pct}%)</div></div></div>${marginHtml}${diffHtml}</div>`;
+
+  // Stima danno specifico per condizione
+  const damageEstimates = {
+    da_riparare: [
+      'Schermo rotto o malfunzionante',
+      'Problema di alimentazione / non si accende',
+      'Lettore ottico difettoso o assente',
+      'Joystick con drift o tasti non funzionanti',
+      'Porta HDMI / USB danneggiata',
+    ],
+    buone: [
+      'Graffi superficiali sulla scocca',
+      'Griglia ventola sporca / polvere interna',
+      'Pasta termica da riapplicare',
+      'Tasti con gioco o piccola usura',
+    ],
+    ottime: [
+      'Graffi minimi, visibili solo da vicino',
+      'Piccole impronte o aloni sullo schermo',
+    ],
+    come_nuovo: [],
+  };
+  const damages = damageEstimates[cond] || [];
+  const damageHtml = damages.length ? `<div style="background:var(--surface2);border-radius:8px;padding:14px 16px;margin-top:14px;">
+    <div style="font-size:11px;color:var(--text3);text-transform:uppercase;font-weight:600;letter-spacing:0.05em;margin-bottom:10px;display:flex;align-items:center;gap:6px;"><i class="bi bi-exclamation-triangle" style="color:var(--amber);"></i> Difetti tipici — ${COND_LABELS[cond]}</div>
+    <ul style="margin:0;padding-left:16px;display:flex;flex-direction:column;gap:5px;">
+      ${damages.map(d=>`<li style="font-size:12.5px;color:var(--text2);">${d}</li>`).join('')}
+    </ul>
+    <div style="font-size:11px;color:var(--text3);margin-top:8px;">Verifica questi punti prima di acquistare. Chiedi foto specifiche al venditore.</div>
+  </div>` : '';
+
+  area.innerHTML=`<div class="deal-result">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:8px;">
+      <div class="verdict ${vClass}">${verdict}</div>
+      <div style="text-align:right;"><div style="font-size:11px;color:var(--text3);margin-bottom:2px;">Media mercato</div><div style="font-size:16px;font-weight:700;">${formatEur(avg)}</div></div>
+    </div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:10px;">${suggestion}</div>
+    <div class="deal-meter"><div class="deal-meter-fill" style="width:${fillW}%;background:${fillColor};"></div></div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);"><span>Caro</span><span>In linea</span><span>Affare</span></div>
+    <div style="margin-top:14px;display:flex;gap:16px;flex-wrap:wrap;">
+      <div><div style="font-size:11px;color:var(--text3);">Prezzo visto</div><div style="font-size:20px;font-weight:700;">€${Math.round(price)}</div></div>
+      <div><div style="font-size:11px;color:var(--text3);">Differenza</div><div style="font-size:20px;font-weight:700;color:${diff>0?'var(--green)':'var(--red)'};">${diff>0?'+':''}€${Math.round(diff)} (${pct>0?'+':''}${pct}%)</div></div>
+    </div>
+    ${consoleNoteHtml}
+    ${feesHtml}
+    ${spreadHtml}
+    ${damageHtml}
+    ${marginHtml}
+    ${diffHtml}
+  </div>`;
 }
 
 // ── SETTINGS ──────────────────────────────────────────────────────────────────
