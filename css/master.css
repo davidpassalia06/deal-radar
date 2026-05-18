@@ -1780,3 +1780,12 @@ select.form-input {
   color: var(--accent);
   background: var(--accent-dim);
 }
+
+
+/* ────────────────────────────────────────────
+   VAL PRODUCT SEARCHABLE DROPDOWN
+   ──────────────────────────────────────────── */
+.val-dropdown-item:hover {
+  background: var(--accent-dim) !important;
+  color: var(--accent) !important;
+}
